@@ -1,0 +1,21 @@
+---
+- name: Check GRUB Entry
+  hosts: your_rhel_hosts  # Replace with your RHEL hosts or inventory group
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Check GRUB Entry in /etc/default/grub
+      lineinfile:
+        path: /etc/default/grub
+        regexp: '^GRUB_CMDLINE_LINUX=.*'
+        line: 'GRUB_CMDLINE_LINUX="desired_grub_entry"'
+        backrefs: yes
+        state: present
+      notify: Update GRUB
+
+  handlers:
+    - name: Update GRUB
+      command: grub2-mkconfig -o /boot/grub2/grub.cfg  # For RHEL 7
+      # OR
+      # command: grub2-mkconfig -o /boot/efi/EFI/redhat/grub.cfg  # For RHEL 8 and 9
