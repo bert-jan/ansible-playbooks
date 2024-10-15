@@ -1,0 +1,111 @@
+- name: Get Fortigate Firewall Policy hitcount from FortiManager
+  hosts: localhost
+  vars:
+    fmg_host: '<fortimanager-hostname-or-ip'
+    fmg_username:  '<username>'
+    fmg_password: '<password>'
+    adom: '<adom>'
+    pkg: '<package-name>'
+  tasks:
+  - name: Login to fortigate
+    ansible.builtin.uri:
+      url: "https://{{ fmg_host }}/jsonrpc"
+      method: POST
+      headers:
+        Content-Type: "application/json"
+      body_format: json
+      body:
+        id: 1
+        method: "exec"
+        params:
+          - url: "/sys/login/user"
+            data:
+              - user: "{{ fmg_username }}"
+                passwd: "{{ fmg_password }}"
+      validate_certs: no
+    register: login_res
+
+  - set_fact:
+      fmg_session: "{{ login_res.json.session }}"
+
+  - name: Get ADOMs
+    ansible.builtin.uri:
+      url: "https://{{ fmg_host }}/jsonrpc"
+      method: POST
+      headers:
+        Content-Type: "application/json"
+      body_format: json
+      body:
+        method: "get"
+        params:
+          - url: "/dvmdb/adom"
+            option: "object-member"
+        session: "{{ fmg_session }}"
+        verbose: 1
+        id: 1
+      validate_certs: no
+    register: adoms
+
+  - name: Refresh policies hitcount
+    ansible.builtin.uri:
+      url: "https://{{ fmg_host }}/jsonrpc"
+      method: POST
+      headers:
+        Content-Type: "application/json"
+      body_format: json
+      body:
+        id: 1
+        method: "exec"
+        params:
+          - url: "/sys/hitcount"
+            data:
+              adom: "{{ adom }}"
+              pkg: "{{adom}}/{{pkg}}"
+        session: "{{ fmg_session }}"
+        verbose: 1
+      validate_certs: no
+    register: refresh_hitcount
+
+  - set_fact:
+      task_id: "{{ refresh_hitcnt.json.result[0].data.task }}"
+
+  - name: Get task status
+    ansible.builtin.uri:
+      url: "https://{{ fmg_host }}/jsonrpc"
+      method: POST
+      headers:
+        Content-Type: "application/json"
+      body_format: json
+      body:
+        method: "get"
+        params:
+          - url: "/task/task/{{task_id}}"
+        session: "{{ fmg_session }}"
+        id: 1
+      validate_certs: no
+    register: task_status
+    until: task_status.json.result[0].data.percent == 100
+    retries: 30
+    delay: 10
+
+  - name: Last hitcount results
+    ansible.builtin.uri:
+      url: "https://{{ fortimanager }}/jsonrpc"
+      method: POST
+      headers:
+        Content-Type: "application/json"
+      body_format: json
+      body:
+        method: "get"
+        params:
+          - url: "/sys/task/result"
+            data:
+              taskid: "{{ task_id }}"
+        session: "{{ fmg_session }}"
+        id: 1
+      validate_certs: no
+    register: hit_count
+
+  - name: Print hitcount
+    debug:
+      msg: "{{ hit_count }}"
