@@ -60,7 +60,7 @@
           - url: "/sys/hitcount"
             data:
               adom: "{{ adom }}"
-              pkg: "{{adom}}/{{pkg}}"
+              pkg: "{{adom}}/{{pkg}}" # specify adom when not root
         session: "{{ fmg_session }}"
         verbose: 1
       validate_certs: no
