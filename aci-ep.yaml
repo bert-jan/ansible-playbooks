@@ -1,0 +1,68 @@
+---
+- name: Delete ACI Endpoint via REST API
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - vars.yml
+  vars:
+    epg_dn: "uni/tn-{{ tenant }}/ap-{{ app_profile }}/epg-{{ epg }}"
+
+  tasks:
+
+    - name: Authenticate to APIC and get session cookie
+      uri:
+        url: "{{ apic }}/api/aaaLogin.json"
+        method: POST
+        body_format: json
+        body:
+          aaaUser:
+            attributes:
+              name: "{{ username }}"
+              pwd: "{{ password }}"
+        validate_certs: no
+      register: login_response
+
+    - name: Set auth cookie
+      set_fact:
+        apic_cookie: "APIC-cookie={{ login_response.cookies['APIC-cookie'] }}"
+
+    - name: Query endpoints for EPG
+      uri:
+        url: "{{ apic }}/api/node/class/fvCEp.json?query-target-filter=eq(fvCEp.epgDn,'{{ epg_dn }}')"
+        method: GET
+        headers:
+          Cookie: "{{ apic_cookie }}"
+        validate_certs: no
+      register: epg_response
+
+    - name: Extract endpoint DN matching MAC
+      set_fact:
+        target_dn: "{{ item.fvCEp.attributes.dn }}"
+      loop: "{{ epg_response.json.imdata }}"
+      when: item.fvCEp.attributes.mac | lower == mac | lower
+      vars:
+        mac: "{{ mac }}"
+
+    - name: Debug endpoint found or not
+      debug:
+        msg: >
+          {% if target_dn is defined %}
+            Endpoint {{ mac }} found: {{ target_dn }}
+          {% else %}
+            Endpoint {{ mac }} not found in EPG.
+          {% endif %}
+
+    - name: Delete endpoint if found
+      uri:
+        url: "{{ apic }}/api/node/mo/{{ target_dn }}.json"
+        method: DELETE
+        headers:
+          Cookie: "{{ apic_cookie }}"
+        validate_certs: no
+      when: target_dn is defined
+      register: delete_result
+
+    - name: Confirm deletion
+      debug:
+        var: delete_result
+      when: delete_result is defined
